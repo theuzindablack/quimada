@@ -2,396 +2,253 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Among Us 2D - Fix Sincronização</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Among Guns: Fix Visibility</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --red: #ff3f34; --green: #05c46b; --blue: #1e90ff; }
-        body, html { margin:0; padding:0; overflow:hidden; background:#000; font-family: sans-serif; color: white; touch-action: none; }
-        canvas { display:block; }
-        .screen { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:100; background: #000; }
-        #game-interface { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
-        #ui-top { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; pointer-events: auto; border: 1px solid #444; }
-        #lobby-menu { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; pointer-events: auto; border: 1px solid #444; }
-        .cosmetic-btn { background: #333; border: 1px solid #555; color: white; padding: 10px; margin: 2px; cursor: pointer; font-size: 20px; width: 50px; }
-        #joystick { position:absolute; bottom:40px; left:40px; width:120px; height:120px; background:rgba(255,255,255,0.1); border: 2px solid #fff; border-radius:50%; pointer-events: auto; }
-        #stick { position:absolute; left:40px; top:40px; width:40px; height:40px; background:#fff; border-radius:50%; }
-        #action-btns { position: absolute; bottom: 40px; right: 40px; pointer-events: auto; display:none; }
-        .btn-main { width: 90px; height: 90px; border-radius: 50%; border: 4px solid white; font-weight: bold; color: white; cursor: pointer; font-size: 18px; }
-        input { padding: 12px; margin: 10px; border-radius: 5px; background: #222; color: #fff; border: 1px solid #444; width: 200px; text-align: center; }
-        button { padding: 10px 20px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { opacity: 0.8; }
+        body, html { margin:0; padding:0; overflow:hidden; background:#000; font-family: sans-serif; touch-action: none; color:white; width:100%; height:100%; }
+        canvas { display:block; width:100vw; height:100vh; }
+        .menu { position:absolute; top:0; left:0; width:100%; height:100%; background:#111; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:100; }
+        .btn { padding:18px; border-radius:12px; border:none; color:white; font-weight:bold; cursor:pointer; width:250px; background:#ff3f34; margin-top:10px; }
+        input { padding:15px; border-radius:8px; border:none; text-align:center; width:230px; margin-bottom:10px; background:#222; color:white; }
+        #ui { position:fixed; top:15px; left:15px; background:rgba(0,0,0,0.7); padding:10px; border-radius:8px; z-index:50; pointer-events:none; }
+        #host-area { position:fixed; top:15px; right:15px; z-index:110; }
+        #reset-btn { background:#05c46b; color:white; border:none; padding:10px 15px; border-radius:5px; font-weight:bold; display:none; cursor:pointer; }
+        #fire-btn { position:fixed; bottom:40px; right:40px; width:85px; height:85px; background:rgba(255, 63, 52, 0.8); border-radius:50%; border:4px solid white; z-index:90; }
+        #joystick { position:fixed; bottom:40px; left:40px; width:100px; height:100px; background:rgba(255,255,255,0.1); border-radius:50%; z-index:90; }
+        #stick { position:absolute; left:30px; top:30px; width:40px; height:40px; background:white; border-radius:50%; }
     </style>
 </head>
 <body>
 
-<div id="setup-screen" class="screen">
-    <h1 style="color:var(--red); letter-spacing: 5px;">AMONG US 2D</h1>
-    <input type="text" id="nameIn" placeholder="SEU NOME" value="Tripulante">
-    <input type="text" id="roomIn" placeholder="ID DA SALA" value="SALA777">
-    <div>
-        <button onclick="init(true)" style="background:var(--green)">CRIAR SALA</button>
-        <button onclick="init(false)" style="background:var(--blue)">ENTRAR</button>
-    </div>
+<div id="menu" class="menu">
+    <h1 style="color:#ff3f34">AMONG GUNS</h1>
+    <input type="text" id="nameIn" placeholder="SEU NOME" maxlength="8">
+    <button class="btn" onclick="connect()">ENTRAR NA SALA</button>
 </div>
 
-<div id="game-interface">
-    <div id="ui-top">
-        <div id="room-info" style="font-size: 12px; color: #aaa;">Sala: ---</div>
-        <div id="player-count">Jogadores: 1</div>
-        <div id="game-status" style="color: #0be881; font-weight: bold; margin-top:5px;">MODO: LOBBY</div>
-        <div id="host-panel" style="display:none; margin-top: 10px;">
-            <button onclick="startGame()" style="background:var(--red); width: 100%;">INICIAR PARTIDA</button>
-        </div>
-    </div>
-
-    <div id="lobby-menu">
-        <p style="font-size: 11px; text-align:center; color:#aaa;">CHAPÉUS</p>
-        <button class="cosmetic-btn" onclick="setHat('none')">❌</button>
-        <button class="cosmetic-btn" onclick="setHat('🍌')">🍌</button>
-        <button class="cosmetic-btn" onclick="setHat('🏴‍☠️')">🏴‍☠️</button>
-        <button class="cosmetic-btn" onclick="setHat('🎧')">🎧</button>
-        <button class="cosmetic-btn" onclick="setHat('📱')">📱</button>
-        <button class="cosmetic-btn" onclick="setHat('😷')">😷</button>
-    </div>
-
-    <div id="joystick"><div id="stick"></div></div>
-
-    <div id="action-btns">
-        <button id="kill-btn" class="btn-main" style="background:var(--red);" onclick="killAction()">KILL</button>
-    </div>
-    
-    <div id="countdown" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size: 100px; font-weight: bold; color: yellow; pointer-events: none; text-shadow: 4px 4px #000;"></div>
-</div>
-
-<canvas id="game"></canvas>
+<div id="host-area"><button id="reset-btn" onclick="resetGame()">REINICIAR TUDO</button></div>
+<div id="ui" style="display:none">HP: <span id="hp-val">100</span> | ZONA: <span id="zone-ui">100%</span></div>
+<button id="fire-btn" style="display:none" ontouchstart="shoot()"></button>
+<div id="joystick" style="display:none"><div id="stick"></div></div>
+<canvas id="canvas"></canvas>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-let peer, myId, roomName, isHost = false;
-let players = {};
-let conns = [];
-let gameReady = false;
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let peer, conn, isHost = false, roomID = "sala_ag_p2p_fixed_01";
+let players = {}, bullets = [], joy = { dx: 0, dy: 0 }, zoneRadius = 1500;
+let myId = "";
 
-function init(host) {
-    isHost = host;
-    roomName = document.getElementById("roomIn").value;
-    const myName = document.getElementById("nameIn").value;
-    myId = isHost ? roomName : "p" + Math.floor(Math.random()*99999);
+const houses = [
+    {x: 400, y: 400, w: 200, h: 200}, {x: 1400, y: 400, w: 200, h: 200},
+    {x: 400, y: 1400, w: 200, h: 200}, {x: 1400, y: 1400, w: 200, h: 200},
+    {x: 900, y: 900, w: 200, h: 200}
+];
 
-    players[myId] = {
-        id: myId, name: myName, x: 1000, y: 1000, 
-        color: ['#c51111', '#132ed1', '#117f2d', '#ed54ba', '#ef7d0d', '#f5f5f7'][Math.floor(Math.random()*6)],
-        hat: 'none', alive: true, facing: 1, role: 'lobby'
-    };
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
 
-    peer = new Peer(myId);
+function connect() {
+    const nome = document.getElementById('nameIn').value || "User";
+    myId = "ID_" + nome + "_" + Math.floor(Math.random()*999);
+    document.getElementById('menu').style.display = 'none';
+
+    peer = new Peer(roomID); // Tenta ser o Host
+
     peer.on('open', (id) => {
-        if(!isHost) setupConn(peer.connect(roomName));
-        document.getElementById('setup-screen').style.display = 'none';
-        document.getElementById('game-interface').style.display = 'block';
-        document.getElementById('room-info').innerText = "ID: " + id;
-        if(isHost) document.getElementById('host-panel').style.display = 'block';
-        gameReady = true;
+        isHost = true;
+        document.getElementById('reset-btn').style.display = 'block';
+        setupGame(nome);
+        peer.on('connection', (c) => setupP2P(c));
+        
+        // Loop de Sincronização Forçada (A cada 2s envia todos os players para todos)
+        setInterval(() => {
+            if(isHost) broadcast({ type: 'sync', all: players, z: zoneRadius });
+        }, 2000);
     });
-    peer.on('connection', setupConn);
-    loop();
+
+    peer.on('error', (err) => {
+        if(err.type === 'unavailable-id') {
+            isHost = false;
+            peer = new Peer(myId);
+            peer.on('open', () => {
+                const c = peer.connect(roomID, { reliable: true });
+                setupP2P(c);
+                setupGame(nome);
+            });
+        }
+    });
 }
 
-function setupConn(conn) {
-    conn.on('open', () => {
-        if(isHost) conns.push(conn);
-        conn.send({ type: 'join', p: players[myId] });
+function setupP2P(c) {
+    conn = c;
+    c.on('open', () => {
+        if(!isHost) c.send({ type: 'join', p: players[myId] });
     });
-    conn.on('data', data => {
-        if(data.type === 'join') {
+    c.on('data', (data) => {
+        if (data.type === 'join') {
             players[data.p.id] = data.p;
-            if(isHost) broadcast({ type: 'sync', all: players });
+            if(isHost) broadcast({ type: 'sync', all: players, z: zoneRadius });
         }
-        if(data.type === 'sync') {
-            // Sincroniza todos os jogadores, mas mantém a própria posição
-            for(let id in data.all) {
-                if(id !== myId) players[id] = data.all[id];
-            }
-            updateUI();
+        if (data.type === 'sync') {
+            // Atualiza players, mas mantém o meu local para não dar lag
+            const me = players[myId];
+            players = data.all;
+            if(me) players[myId] = me;
+            zoneRadius = data.z;
         }
-        if(data.type === 'move') {
+        if (data.type === 'move') {
             if(players[data.id]) {
                 players[data.id].x = data.x;
                 players[data.id].y = data.y;
-                players[data.id].facing = data.facing;
+                players[data.id].angle = data.angle;
             }
+            if(isHost) broadcast(data, c.peer);
         }
-        if(data.type === 'start_event') {
-            applyStartEffect(data.role);
+        if (data.type === 'fire') {
+            bullets.push(data.b);
+            if(isHost) broadcast(data, c.peer);
+        }
+        if (data.type === 'hit') {
+            if(players[data.id]) {
+                players[data.id].hp = data.hp;
+                if(data.hp <= 0) players[data.id].alive = false;
+            }
         }
     });
 }
 
-function broadcast(msg) {
-    conns.forEach(c => c.open && c.send(msg));
+function broadcast(data, ignore) {
+    if(!isHost) return;
+    Object.values(peer.connections).forEach(conns => {
+        conns.forEach(c => { if(c.open && c.peer !== ignore) c.send(data); });
+    });
 }
 
-function updateUI() {
-    document.getElementById('player-count').innerText = "Jogadores: " + Object.keys(players).length;
+function setupGame(nome) {
+    document.getElementById('ui').style.display = 'block';
+    document.getElementById('fire-btn').style.display = 'block';
+    document.getElementById('joystick').style.display = 'block';
+    players[myId] = { id: myId, name: nome, x: 1000, y: 1000, hp: 100, alive: true, angle: 0, color: isHost?'#ff3f34':'#1e90ff' };
+    requestAnimationFrame(update);
 }
 
-function setHat(hat) {
-    players[myId].hat = hat;
-    const msg = { type: 'join', p: players[myId] };
-    if(isHost) broadcast({ type: 'sync', all: players });
-    else if(conns[0]) conns[0].send(msg);
+function resetGame() {
+    if(!isHost) return;
+    zoneRadius = 1500;
+    bullets = [];
+    for(let id in players) {
+        players[id].hp = 100; players[id].alive = true;
+        players[id].x = 1000 + (Math.random()*50);
+        players[id].y = 1000 + (Math.random()*50);
+    }
+    broadcast({ type: 'sync', all: players, z: zoneRadius });
 }
 
-function startGame() {
-    const ids = Object.keys(players);
-    if(ids.length < 2) return alert("Precisa de pelo menos 2 jogadores!");
-    
-    let shuffled = [...ids].sort(() => Math.random() - 0.5);
-    let roles = {};
-    
-    // Define papéis
-    roles[shuffled[0]] = 'impostor';
-    if(ids.length === 2) roles[shuffled[1]] = 'sherife';
-    else ids.forEach(id => { if(!roles[id]) roles[id] = 'tripulante'; });
-
-    // Envia para todos
-    ids.forEach(id => {
-        const data = { type: 'start_event', role: roles[id] };
-        if(id === myId) applyStartEffect(roles[id]);
-        else {
-            const c = conns.find(conn => conn.peer === id);
-            if(c) c.send(data);
+function ejectFromHouses(p) {
+    houses.forEach(h => {
+        if (p.x > h.x - 25 && p.x < h.x + h.w + 25 && p.y > h.y - 25 && p.y < h.y + h.h + 25) {
+            let dL = p.x - (h.x - 25); let dR = (h.x + h.w + 25) - p.x;
+            let dT = p.y - (h.y - 25); let dB = (h.y + h.h + 25) - p.y;
+            let min = Math.min(dL, dR, dT, dB);
+            if (min == dL) p.x -= dL; else if (min == dR) p.x += dR;
+            else if (min == dT) p.y -= dT; else p.y += dB;
         }
     });
 }
 
-function applyStartEffect(role) {
-    let count = 3;
-    const cd = document.getElementById('countdown');
-    const timer = setInterval(() => {
-        cd.innerText = count;
-        count--;
-        if(count < 0) {
-            clearInterval(timer);
-            cd.innerText = "";
-            players[myId].role = role;
-            document.getElementById('game-status').innerText = "ROLE: " + role.toUpperCase();
-            document.getElementById('game-status').style.color = (role === 'impostor' ? 'red' : 'white');
-            document.getElementById('lobby-menu').style.display = 'none';
-            if(role === 'impostor' || role === 'sherife') {
-                document.getElementById('action-btns').style.display = 'block';
-            }
-        }
-    }, 1000);
+function shoot() {
+    const me = players[myId];
+    if (!me || !me.alive) return;
+    const b = { x: me.x, y: me.y, dx: Math.cos(me.angle)*18, dy: Math.sin(me.angle)*18, owner: myId };
+    bullets.push(b);
+    if(isHost) broadcast({ type: 'fire', b: b }); else if(conn) conn.send({ type: 'fire', b: b });
 }
 
-// --- RENDERIZAÇÃO ---
-function drawPlayer(p, ox, oy) {
-    const x = p.x - ox;
-    const y = p.y - oy;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(p.facing, 1);
-    
-    // Corpo
-    ctx.fillStyle = p.color;
-    ctx.strokeStyle = "black";
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.roundRect(-20, -30, 40, 50, 10); ctx.fill(); ctx.stroke();
-    // Visor
-    ctx.fillStyle = "#add8e6";
-    ctx.beginPath(); ctx.roundRect(5, -20, 25, 15, 5); ctx.fill(); ctx.stroke();
-    
-    // Chapéu
-    if(p.hat !== 'none') {
-        ctx.scale(1/p.facing, 1);
-        ctx.font = "24px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(p.hat, 0, -35);
-    }
-    ctx.restore();
-    
-    ctx.fillStyle = "white";
-    ctx.font = "bold 14px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(p.name, x, y - 55);
-}
+let lastSend = 0;
+function update(time) {
+    const me = players[myId];
+    if (!me) return requestAnimationFrame(update);
 
-function drawMap(ox, oy) {
-    ctx.strokeStyle = "#444";
-    ctx.lineWidth = 10;
-    // Cafeteria
-    ctx.strokeRect(700-ox, 700-oy, 600, 600);
-    // Mesa
-    ctx.fillStyle = "#222";
-    ctx.beginPath(); ctx.arc(1000-ox, 1000-oy, 80, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-}
+    if (me.alive && (joy.dx !== 0 || joy.dy !== 0)) {
+        me.x += joy.dx * 7; me.y += joy.dy * 7;
+        me.angle = Math.atan2(joy.dy, joy.dx);
+        ejectFromHouses(me);
 
-let joy = { dx: 0, dy: 0 };
-const joyEl = document.getElementById('joystick');
-const stickEl = document.getElementById('stick');
-
-joyEl.addEventListener('touchmove', e => {
-    e.preventDefault();
-    const r = joyEl.getBoundingClientRect();
-    const t = e.touches[0];
-    let x = t.clientX - r.left - 60;
-    let y = t.clientY - r.top - 60;
-    const d = Math.min(Math.sqrt(x*x+y*y), 45);
-    const a = Math.atan2(y, x);
-    joy.dx = Math.cos(a) * (d/45);
-    joy.dy = Math.sin(a) * (d/45);
-    stickEl.style.transform = `translate(${joy.dx*45}px, ${joy.dy*45}px)`;
-});
-joyEl.addEventListener('touchend', () => { joy = {dx:0, dy:0}; stickEl.style.transform = "none"; });
-
-function loop() {
-    requestAnimationFrame(loop);
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    if(gameReady && players[myId]) {
-        if(joy.dx !== 0 || joy.dy !== 0) {
-            players[myId].x += joy.dx * 6;
-            players[myId].y += joy.dy * 6;
-            players[myId].facing = joy.dx > 0 ? 1 : -1;
-            
-            const moveData = { type:'move', id: myId, x: players[myId].x, y: players[myId].y, facing: players[myId].facing };
-            if(isHost) broadcast(moveData);
-            else if(conns[0]) conns[0].send(moveData);
+        if(time - lastSend > 40) { // Envia movimento 25 vezes por segundo
+            const data = { type: 'move', id: myId, x: me.x, y: me.y, angle: me.angle };
+            if(isHost) broadcast(data); else if(conn && conn.open) conn.send(data);
+            lastSend = time;
         }
     }
 
-    ctx.fillStyle = "#111";
-    ctx.fillRect(0,0,canvas.width, canvas.height);
-    
-    if(players[myId]) {
-        const ox = players[myId].x - canvas.width/2;
-        const oy = players[myId].y - canvas.height/2;
-        drawMap(ox, oy);
-        for(let id in players) drawPlayer(players[id], ox, oy);
-    }
-}
-</script>
-</body>
-</html>
-
-
-// --- DESENHO DO JOGADOR COM ACESSÓRIOS ---
-function drawPlayer(p, ox, oy) {
-    if(!p.alive) {
-        // Desenha ossinho/fantasma
-        ctx.fillStyle = "rgba(255,255,255,0.3)";
-        ctx.beginPath(); ctx.arc(p.x-ox, p.y-oy, 20, 0, Math.PI*2); ctx.fill();
-        return;
+    if(isHost && zoneRadius > 50) zoneRadius -= 0.15;
+    if(Math.hypot(me.x - 1000, me.y - 1000) > zoneRadius && me.alive) {
+        me.hp -= 0.2;
+        if(me.hp <= 0) { me.alive = false; if(!isHost && conn) conn.send({type:'hit', id:myId, hp:0}); }
     }
 
-    const x = p.x - ox;
-    const y = p.y - oy;
-    
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(p.facing, 1);
-    
-    // Corpo
-    ctx.fillStyle = p.color;
-    ctx.strokeStyle = "black";
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.roundRect(-20, -30, 40, 50, 10); ctx.fill(); ctx.stroke();
-    // Visor
-    ctx.fillStyle = "#add8e6";
-    ctx.beginPath(); ctx.roundRect(5, -20, 25, 15, 5); ctx.fill(); ctx.stroke();
-    
-    // Acessórios
-    ctx.scale(1/p.facing, 1); // Desfaz flip para o chapéu não inverter
-    ctx.font = "20px Arial";
-    if(p.hat === 'banana') ctx.fillText("🍌", -10, -35);
-    if(p.hat === 'pirate') ctx.fillText("🏴‍☠️", -10, -35);
-    if(p.hat === 'phone') ctx.fillText("📱", -10, -35);
-    if(p.hat === 'headphone') ctx.fillText("🎧", -10, -35);
-    if(p.hat === 'mask_covid') ctx.fillText("😷", -5, -10);
-
-    ctx.restore();
-    
-    ctx.fillStyle = "white";
-    ctx.textAlign = "center";
-    ctx.fillText(p.name, x, y - 50);
-}
-
-// --- JOYSTICK E LOOP ---
-let joy = { dx: 0, dy: 0 };
-let isDrag = false;
-const jEl = document.getElementById('joystick');
-const sEl = document.getElementById('stick');
-
-jEl.addEventListener('touchstart', e => { isDrag = true; });
-window.addEventListener('touchmove', e => {
-    if(!isDrag) return;
-    const r = jEl.getBoundingClientRect();
-    const touch = e.touches[0];
-    let x = touch.clientX - r.left - 60;
-    let y = touch.clientY - r.top - 60;
-    const d = Math.min(Math.sqrt(x*x+y*y), 40);
-    const a = Math.atan2(y,x);
-    joy.dx = Math.cos(a) * (d/40);
-    joy.dy = Math.sin(a) * (d/40);
-    sEl.style.transform = `translate(${joy.dx*40}px, ${joy.dy*40}px)`;
-});
-window.addEventListener('touchend', () => { isDrag = false; joy={dx:0, dy:0}; sEl.style.transform = "none"; });
-
-function loop() {
-    requestAnimationFrame(loop);
-    if(gameState === 'playing' && players[myId].alive) {
-        players[myId].x += joy.dx * 5;
-        players[myId].y += joy.dy * 5;
-        if(joy.dx !== 0) players[myId].facing = joy.dx > 0 ? 1 : -1;
+    bullets.forEach((b, i) => {
+        b.x += b.dx; b.y += b.dy;
+        let hitHouse = false;
+        houses.forEach(h => { if(b.x > h.x && b.x < h.x+h.w && b.y > h.y && b.y < h.y+h.h) hitHouse = true; });
+        if(hitHouse) bullets.splice(i, 1);
         
-        broadcast({ type:'move', id: myId, x: players[myId].x, y: players[myId].y, facing: players[myId].facing });
-    }
-
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0,0,canvas.width, canvas.height);
-    
-    // Espaço
-    ctx.fillStyle = "white";
-    for(let i=0; i<50; i++) ctx.fillRect((i*137)%canvas.width, (i*511)%canvas.height, 2, 2);
-
-    if(gameState === 'playing' || gameState === 'voting') {
-        const ox = players[myId].x - canvas.width/2;
-        const oy = players[myId].y - canvas.height/2;
-        
-        drawMap(ox, oy);
-        Object.values(players).forEach(p => drawPlayer(p, ox, oy));
-    }
-}
-
-function showScreen(id) {
-    document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
-    if(id !== 'none') document.getElementById(id).style.display = 'flex';
-}
-
-function doAction(type) {
-    if(type === 'kill') {
-        Object.values(players).forEach(p => {
-            if(p.id !== myId && p.alive) {
-                const dist = Math.sqrt((p.x-players[myId].x)**2 + (p.y-players[myId].y)**2);
-                if(dist < 60) {
-                    broadcast({ type: 'kill_event', target: p.id });
-                    players[p.id].alive = false;
+        if(isHost) {
+            Object.values(players).forEach(t => {
+                if(t.alive && t.id !== b.owner && Math.hypot(b.x - t.x, b.y - t.y) < 30) {
+                    t.hp -= 20; if(t.hp <= 0) t.alive = false;
+                    broadcast({ type: 'hit', id: t.id, hp: t.hp });
+                    bullets.splice(i, 1);
                 }
-            }
-        });
-    }
+            });
+        }
+    });
+
+    draw(me);
+    requestAnimationFrame(update);
 }
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-</script>
-</body>
-</html>
-loop();
+function draw(me) {
+    const ox = me.x - canvas.width/2, oy = me.y - canvas.height/2;
+    ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0,0,canvas.width, canvas.height);
+
+    houses.forEach(h => { ctx.fillStyle='#222'; ctx.fillRect(h.x-ox, h.y-oy, h.w, h.h); ctx.strokeStyle='#444'; ctx.strokeRect(h.x-ox, h.y-oy, h.w, h.h); });
+    ctx.strokeStyle = '#ff3f34'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(1000-ox, 1000-oy, zoneRadius, 0, Math.PI*2); ctx.stroke();
+
+    Object.values(players).forEach(p => {
+        if(!p.id) return;
+        ctx.save(); ctx.translate(p.x - ox, p.y - oy);
+        if(!p.alive) ctx.globalAlpha = 0.2;
+        ctx.fillStyle = p.color; ctx.beginPath(); ctx.roundRect(-22, -28, 44, 56, 12); ctx.fill();
+        ctx.rotate(p.angle);
+        ctx.fillRect(-32, -15, 12, 30); // mochila
+        ctx.fillStyle = '#add8e6'; ctx.beginPath(); ctx.roundRect(5, -18, 22, 25, 8); ctx.fill(); // visor
+        ctx.fillStyle = '#000'; ctx.fillRect(18, 5, 25, 10); // arma
+        ctx.restore(); ctx.globalAlpha = 1;
+        ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 14px Arial"; ctx.fillText(p.name, p.x-ox, p.y-oy-45);
+        if(p.alive) {
+            ctx.fillStyle='#333'; ctx.fillRect(p.x-ox-20, p.y-oy-40, 40, 5);
+            ctx.fillStyle='#0f0'; ctx.fillRect(p.x-ox-20, p.y-oy-40, (p.hp/100)*40, 5);
+        }
+    });
+
+    ctx.fillStyle = '#fff200'; bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x-ox, b.y-oy, 4, 0, 7); ctx.fill(); });
+    document.getElementById('hp-val').innerText = Math.floor(Math.max(0, me.hp));
+    document.getElementById('zone-ui').innerText = Math.floor((zoneRadius/1500)*100) + "%";
+}
+
+const jEl = document.getElementById('joystick');
+const handleTouch = e => {
+    e.preventDefault(); const r = jEl.getBoundingClientRect(), t = e.touches[0];
+    let x = t.clientX-r.left-50, y = t.clientY-r.top-50;
+    const d = Math.min(Math.sqrt(x*x+y*y), 40), a = Math.atan2(y, x);
+    joy.dx = Math.cos(a)*(d/40); joy.dy = Math.sin(a)*(d/40);
+    document.getElementById('stick').style.transform = `translate(${joy.dx*40}px, ${joy.dy*40}px)`;
+};
+jEl.addEventListener('touchstart', handleTouch); jEl.addEventListener('touchmove', handleTouch);
+jEl.addEventListener('touchend', () => { joy = {dx:0, dy:0}; document.getElementById('stick').style.transform = `translate(0,0)`; });
 </script>
 </body>
 </html>
