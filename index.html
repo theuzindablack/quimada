@@ -1,177 +1,165 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Among Guns: Anti-Stuck Fix</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>QUEIMADA: IA REFORÇADA</title>
     <style>
-        body, html { margin:0; padding:0; overflow:hidden; background:#000; font-family: sans-serif; touch-action: none; color:white; width: 100%; height: 100%; }
-        canvas { display:block; width: 100vw; height: 100vh; }
-        .menu { position:absolute; top:0; left:0; width:100%; height:100%; background:#111; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:100; }
-        .btn { padding:18px; border-radius:12px; border:none; color:white; font-weight:bold; cursor:pointer; width:80%; max-width:300px; background:#ff3f34; margin-top:10px; font-size: 18px; }
-        input { padding:15px; border-radius:8px; border:none; text-align:center; width:80%; max-width:280px; font-size: 16px; background:#222; color:white; }
-        #ui { position:fixed; top:env(safe-area-inset-top, 10px); left:10px; background:rgba(0,0,0,0.6); padding:10px; border-radius:8px; z-index:50; }
-        #host-area { position:fixed; top:env(safe-area-inset-top, 10px); right:10px; z-index:110; }
-        #reset-btn { background:#05c46b; color:white; border:none; padding:10px 15px; border-radius:5px; font-weight:bold; display:none; }
-        #fire-btn { position:fixed; bottom:40px; right:40px; width:80px; height:80px; background:rgba(255, 63, 52, 0.8); border-radius:50%; border:4px solid white; z-index:90; }
-        #joystick { position:fixed; bottom:40px; left:40px; width:100px; height:100px; background:rgba(255,255,255,0.1); border-radius:50%; z-index:90; border: 2px solid rgba(255,255,255,0.2); }
-        #stick { position:absolute; left:30px; top:30px; width:40px; height:40px; background:white; border-radius:50%; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        #ui { position: absolute; top: 10px; width: 100%; text-align: center; color: white; z-index: 100; font-size: 22px; text-shadow: 2px 2px #000; pointer-events: none; }
+        #joystick { position: absolute; bottom: 30px; left: 30px; width: 80px; height: 80px; background: rgba(255,255,255,0.2); border-radius: 50%; border: 2px solid #fff; }
+        #stick { position: absolute; top: 20px; left: 20px; width: 40px; height: 40px; background: #fff; border-radius: 50%; }
+        #btn-throw { position: absolute; bottom: 30px; right: 30px; width: 100px; height: 100px; background: #00ff00; border-radius: 50%; border: 5px solid #fff; font-weight: bold; display: none; color: #000; box-shadow: 0 0 15px #00ff00; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 1000; color: white; flex-direction: column; }
     </style>
 </head>
 <body>
 
-<div id="menu" class="menu">
-    <h1 style="color:#ff3f34; margin-bottom:20px;">AMONG GUNS</h1>
-    <input type="text" id="nameIn" placeholder="SEU NOME" maxlength="10">
-    <button class="btn" onclick="connect()">JOGAR</button>
+<div id="ui">INIMIGO AGORA BUSCA A BOLA NO FUNDO!</div>
+<div id="overlay">
+    <h1 id="result-text"></h1>
+    <button onclick="location.reload()" style="padding:15px 30px; font-size:20px;">RECOMEÇAR</button>
 </div>
 
-<div id="host-area">
-    <button id="reset-btn" onclick="resetGame()">RESET</button>
-</div>
+<div id="joystick"><div id="stick"></div></div>
+<button id="btn-throw">LANÇAR!</button>
 
-<div id="ui" style="display:none">
-    HP: <span id="hp-val">100</span> | ZONA: <span id="zone-ui">100%</span>
-</div>
-
-<button id="fire-btn" style="display:none" ontouchstart="shoot()"></button>
-<div id="joystick" style="display:none"><div id="stick"></div></div>
-
-<canvas id="canvas"></canvas>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-let peer, conn, isHost = false, roomID = "br_p2p_99";
-let players = {}, bullets = [];
-let joy = { dx: 0, dy: 0 };
-let zoneRadius = 1500;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({antialias: true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-window.addEventListener('resize', resize);
-resize();
+    scene.add(new THREE.AmbientLight(0xffffff, 1));
 
-const houses = [
-    {x: 400, y: 400, w: 200, h: 200}, {x: 1400, y: 400, w: 200, h: 200},
-    {x: 400, y: 1400, w: 200, h: 200}, {x: 1400, y: 1400, w: 200, h: 200},
-    {x: 900, y: 900, w: 200, h: 200}
-];
+    // CHÃO E LINHAS
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 120), new THREE.MeshBasicMaterial({ color: 0x111 }));
+    floor.rotation.x = -Math.PI/2; scene.add(floor);
 
-const myId = localStorage.getItem('p2p_id') || 'P-' + Math.floor(Math.random()*9999);
-localStorage.setItem('p2p_id', myId);
-
-// FUNÇÃO PARA EXPULSAR DA CASA CASO BUGUE
-function ejectFromHouses(p) {
-    houses.forEach(h => {
-        if (p.x > h.x - 25 && p.x < h.x + h.w + 25 && p.y > h.y - 25 && p.y < h.y + h.h + 25) {
-            let dL = p.x - (h.x - 25);
-            let dR = (h.x + h.w + 25) - p.x;
-            let dT = p.y - (h.y - 25);
-            let dB = (h.y + h.h + 25) - p.y;
-            let min = Math.min(dL, dR, dT, dB);
-            if (min == dL) p.x -= dL;
-            else if (min == dR) p.x += dR;
-            else if (min == dT) p.y -= dT;
-            else p.y += dB;
-        }
-    });
-}
-
-function connect() {
-    document.getElementById('menu').style.display = 'none';
-    peer = new Peer(roomID);
-    peer.on('open', () => { isHost = true; document.getElementById('reset-btn').style.display = 'block'; setupGame(); peer.on('connection', setupP2P); });
-    peer.on('error', () => { isHost = false; peer = new Peer("c_" + Math.random().toString(36).substr(2, 5)); peer.on('open', () => { setupP2P(peer.connect(roomID, {reliable: false})); setupGame(); }); });
-}
-
-function setupP2P(c) {
-    conn = c;
-    c.on('data', (data) => {
-        if (data.type === 'join') { players[data.p.id] = data.p; if(isHost) broadcast({type:'sync', all:players, z:zoneRadius}); }
-        if (data.type === 'sync') { players = data.all; zoneRadius = data.z; }
-        if (data.type === 'move' && players[data.id]) { players[data.id].x = data.x; players[data.id].y = data.y; players[data.id].angle = data.angle; if(isHost) broadcast(data, c.peer); }
-        if (data.type === 'fire') { bullets.push(data.b); if(isHost) broadcast(data, c.peer); }
-        if (data.type === 'hit') { if(players[data.id]) players[data.id].hp = data.hp; if(data.hp <= 0) players[data.id].alive = false; }
-    });
-}
-
-function broadcast(data, ignore) { if(!isHost) return; Object.values(peer.connections).forEach(conns => conns.forEach(c => c.open && c.peer !== ignore && c.send(data))); }
-
-function setupGame() {
-    document.getElementById('ui').style.display = 'block';
-    document.getElementById('fire-btn').style.display = 'block';
-    document.getElementById('joystick').style.display = 'block';
-    // Começa no centro, o eject resolve se for em cima de casa
-    players[myId] = { id: myId, name: document.getElementById('nameIn').value || 'User', x: 1000, y: 1000, hp: 100, alive: true, angle: 0, color: isHost ? '#ff3f34' : '#1e90ff' };
-    requestAnimationFrame(update);
-}
-
-function resetGame() { if(!isHost) return; zoneRadius = 1500; for(let id in players) { players[id].hp = 100; players[id].alive = true; players[id].x = 1000; players[id].y = 1000; } broadcast({type:'sync', all:players, z:zoneRadius}); }
-
-function shoot() {
-    const p = players[myId]; if (!p.alive) return;
-    const b = { x: p.x, y: p.y, dx: Math.cos(p.angle)*18, dy: Math.sin(p.angle)*18, owner: myId };
-    bullets.push(b);
-    if (isHost) broadcast({type:'fire', b:b}); else if (conn) conn.send({type:'fire', b:b});
-}
-
-function update() {
-    const me = players[myId];
-    if (!me) return requestAnimationFrame(update);
-    if (me.alive) {
-        if (joy.dx !== 0 || joy.dy !== 0) {
-            me.x += joy.dx * 7; me.y += joy.dy * 7;
-            me.angle = Math.atan2(joy.dy, joy.dx);
-        }
-        // SISTEMA ANTI-BUG: Sempre expulsa o player se ele entrar na parede
-        ejectFromHouses(me);
-        
-        const m = { type: 'move', id: myId, x: me.x, y: me.y, angle: me.angle };
-        if (isHost) broadcast(m); else if (conn && conn.open) conn.send(m);
+    function createLine(w, h, x, z, color = 0xffffff) {
+        const geo = new THREE.PlaneGeometry(w, h);
+        const mat = new THREE.MeshBasicMaterial({ color: color });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.rotation.x = -Math.PI/2; mesh.position.set(x, 0.2, z);
+        scene.add(mesh);
     }
-    if(isHost && zoneRadius > 50) zoneRadius -= 0.15;
-    bullets.forEach((b, i) => { 
-        b.x += b.dx; b.y += b.dy; 
-        houses.forEach(h => { if(b.x > h.x && b.x < h.x+h.w && b.y > h.y && b.y < h.y+h.h) bullets.splice(i, 1); });
-        if(isHost) Object.values(players).forEach(t => { if(t.alive && t.id!==b.owner && Math.hypot(b.x-t.x,b.y-t.y)<30){ t.hp-=20; if(t.hp<=0)t.alive=false; broadcast({type:'hit',id:t.id,hp:t.hp}); bullets.splice(i,1); } });
-    });
-    draw(me);
-    requestAnimationFrame(update);
-}
+    createLine(60, 1.5, 0, 0, 0xff0000); // Meio
+    createLine(1, 120, -30, 0); createLine(1, 120, 30, 0); // Laterais
 
-function draw(me) {
-    const ox = me.x - canvas.width/2, oy = me.y - canvas.height/2;
-    ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0,0,canvas.width, canvas.height);
-    houses.forEach(h => { ctx.fillStyle='#222'; ctx.fillRect(h.x-ox, h.y-oy, h.w, h.h); ctx.strokeStyle='#444'; ctx.strokeRect(h.x-ox, h.y-oy, h.w, h.h); });
-    ctx.strokeStyle = '#ff3f34'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(1000-ox, 1000-oy, zoneRadius, 0, Math.PI*2); ctx.stroke();
-    Object.values(players).forEach(p => {
-        ctx.save(); ctx.translate(p.x - ox, p.y - oy);
-        if(!p.alive) ctx.globalAlpha = 0.2;
-        ctx.fillStyle = p.color; ctx.beginPath(); ctx.roundRect(-22, -28, 44, 56, 12); ctx.fill();
-        ctx.rotate(p.angle);
-        ctx.fillRect(-32, -15, 12, 30); // mochila
-        ctx.fillStyle = '#add8e6'; ctx.beginPath(); ctx.roundRect(5, -18, 22, 25, 8); ctx.fill(); // visor
-        ctx.fillStyle = '#000'; ctx.fillRect(18, 5, 25, 10); // arma
-        ctx.restore(); ctx.globalAlpha = 1;
-        ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.fillText(p.name, p.x-ox, p.y-oy-45);
-        if(p.alive) { ctx.fillStyle='red'; ctx.fillRect(p.x-ox-20, p.y-oy-40, 40, 5); ctx.fillStyle='#0f0'; ctx.fillRect(p.x-ox-20, p.y-oy-40, (p.hp/100)*40, 5); }
-    });
-    ctx.fillStyle = '#fff200'; bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x-ox, b.y-oy, 4, 0, 7); ctx.fill(); });
-    document.getElementById('hp-val').innerText = Math.floor(Math.max(0, me.hp));
-    document.getElementById('zone-ui').innerText = Math.floor((zoneRadius/1500)*100) + "%";
-}
+    // PERSONAGENS
+    const player = new THREE.Mesh(new THREE.BoxGeometry(5, 8, 5), new THREE.MeshBasicMaterial({ color: 0x00ff00 }));
+    player.position.set(0, 4, 40); scene.add(player);
 
-const jEl = document.getElementById('joystick');
-const handleTouch = e => {
-    e.preventDefault(); const r = jEl.getBoundingClientRect(), t = e.touches[0];
-    let x = t.clientX-r.left-50, y = t.clientY-r.top-50;
-    const d = Math.min(Math.sqrt(x*x+y*y), 40), a = Math.atan2(y, x);
-    joy.dx = Math.cos(a)*(d/40); joy.dy = Math.sin(a)*(d/40);
-    document.getElementById('stick').style.transform = `translate(${joy.dx*40}px, ${joy.dy*40}px)`;
-};
-jEl.addEventListener('touchstart', handleTouch); jEl.addEventListener('touchmove', handleTouch);
-jEl.addEventListener('touchend', () => { joy = {dx:0, dy:0}; document.getElementById('stick').style.transform = `translate(0,0)`; });
+    const enemy = new THREE.Mesh(new THREE.BoxGeometry(5, 8, 5), new THREE.MeshBasicMaterial({ color: 0xff00ff }));
+    enemy.position.set(0, 4, -45); scene.add(enemy);
+
+    // BOLA
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(2.5, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffff00 }));
+    ball.position.set(0, 2.5, 15); scene.add(ball);
+
+    // MIRA
+    const laserMat = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+    const laserGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    const laser = new THREE.Line(laserGeo, laserMat);
+    scene.add(laser);
+
+    let ballState = "SOLTA", owner = "NINGUEM", ballVel = new THREE.Vector3();
+    let move = {x:0, z:0}, gameActive = true;
+
+    // JOYSTICK
+    window.addEventListener('touchmove', (e) => {
+        if(!gameActive) return;
+        const t = e.touches[0], r = document.getElementById('joystick').getBoundingClientRect();
+        let dx = t.clientX - (r.left + 40), dz = t.clientY - (r.top + 40);
+        const d = Math.sqrt(dx*dx + dz*dz); if(d > 30) { dx *= 30/d; dz *= 30/d; }
+        document.getElementById('stick').style.transform = `translate(${dx}px, ${dz}px)`;
+        move.x = dx/30; move.z = dz/30;
+    });
+    window.addEventListener('touchend', () => { move = {x:0, z:0}; document.getElementById('stick').style.transform = 'translate(0,0)'; });
+
+    document.getElementById('btn-throw').onclick = () => {
+        if(owner === "PLAYER") {
+            ballState = "VOANDO_PLAYER"; owner = "NINGUEM";
+            ballVel.set((enemy.position.x - player.position.x) * 0.22, 0, -7.5);
+        }
+    };
+
+    function animate() {
+        if(!gameActive) return;
+        requestAnimationFrame(animate);
+
+        // Movimento Player
+        player.position.x = Math.max(-27, Math.min(27, player.position.x + move.x * 1.5));
+        player.position.z = Math.max(5, Math.min(55, player.position.z + move.z * 1.5));
+
+        // IA INIMIGO MELHORADA
+        if(ballState === "SOLTA" && ball.position.z < 0) {
+            // Persegue a bola agressivamente em X e Z
+            const dirX = Math.sign(ball.position.x - enemy.position.x);
+            const dirZ = Math.sign(ball.position.z - enemy.position.z);
+            enemy.position.x += dirX * 1.3;
+            enemy.position.z += dirZ * 1.3;
+
+            // Se estiver muito perto da bola no campo dele, ele pega
+            if(enemy.position.distanceTo(ball.position) < 8) {
+                owner = "ENEMY"; ballState = "POSSE";
+            }
+        } else if (owner !== "ENEMY") {
+            // Volta para posição de guarda se não houver bola no campo dele
+            enemy.position.x += Math.sin(Date.now()*0.005) * 1.8;
+            enemy.position.z += ((-45) - enemy.position.z) * 0.1;
+        }
+        
+        // Limites estritos do inimigo (consegue ir até o fundo Z = -58)
+        enemy.position.x = Math.max(-27, Math.min(27, enemy.position.x));
+        enemy.position.z = Math.max(-58, Math.min(-2, enemy.position.z));
+
+        // Lógica de Posse
+        if(owner === "PLAYER") {
+            ball.position.set(player.position.x, 6, player.position.z - 6);
+            laser.visible = true;
+            laser.geometry.setFromPoints([ball.position, enemy.position]);
+        } else if(owner === "ENEMY") {
+            ball.position.set(enemy.position.x, 6, enemy.position.z + 6);
+            laser.visible = false;
+            if(Math.random() < 0.03) { 
+                ballState = "VOANDO_ENEMY"; owner = "NINGUEM"; 
+                ballVel.set((player.position.x - enemy.position.x)*0.16, 0, 6.5); 
+            }
+        } else { laser.visible = false; }
+
+        // Bola em movimento
+        if(ballState.includes("VOANDO")) {
+            ball.position.add(ballVel);
+            if(Math.abs(ball.position.x) > 28) ballVel.x *= -1;
+            if(Math.abs(ball.position.z) > 58) { 
+                ballVel.z *= -0.5; // Quica menos para parar no campo
+                ballState = "SOLTA"; 
+            }
+
+            if(ballState === "VOANDO_PLAYER" && ball.position.distanceTo(enemy.position) < 6) {
+                gameActive = false; document.getElementById('overlay').style.display = 'flex';
+                document.getElementById('result-text').innerText = "VITÓRIA! 🎉";
+            }
+            if(ballState === "VOANDO_ENEMY" && ball.position.distanceTo(player.position) < 6) {
+                gameActive = false; document.getElementById('overlay').style.display = 'flex';
+                document.getElementById('result-text').innerText = "DERROTA! 💀";
+            }
+        }
+
+        // Jogador pega a bola
+        if(ballState === "SOLTA" && ball.position.z > 0 && player.position.distanceTo(ball.position) < 12) {
+            owner = "PLAYER"; ballState = "POSSE";
+        }
+
+        document.getElementById('btn-throw').style.display = (owner === "PLAYER") ? "block" : "none";
+        camera.position.set(0, 110, 130);
+        camera.lookAt(0, 0, 0);
+        renderer.render(scene, camera);
+    }
+    animate();
 </script>
 </body>
 </html>
